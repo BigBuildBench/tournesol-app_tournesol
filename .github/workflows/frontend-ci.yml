@@ -1,0 +1,21 @@
+name: Frontend lint and tests
+
+on: [push, pull_request]
+
+defaults:
+  run:
+    working-directory: frontend
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '18'
+      - run: yarn install --frozen-lockfile
+      - run: ./scripts/generate-services-from-openapi.sh
+      - run: yarn test
+      - run: yarn lint

@@ -1,0 +1,216 @@
+/**
+ * Functions and shortcuts used to interact with the Tournesol's recommendations
+ * API.
+ */
+
+import {
+  PaginatedContributorRecommendationsList,
+  PaginatedRecommendationList,
+  PollCriteria,
+  PollsService,
+  UsersService,
+} from 'src/services/openapi';
+import {
+  PRESIDENTIELLE_2022_POLL_NAME,
+  YOUTUBE_POLL_NAME,
+} from 'src/utils/constants';
+import { SelectablePoll } from 'src/utils/types';
+
+const getParamValueAsNumber = (
+  params: URLSearchParams,
+  key: string
+): number | undefined => {
+  const value = params.get(key);
+  return value ? Number(value) : undefined;
+};
+
+/**
+ * Replace the key `date` of `params` by a new one compatible with the API.
+ */
+const overwriteDateURLParameter = (
+  pollName: string,
+  params: URLSearchParams
+): void => {
+  if (pollName === YOUTUBE_POLL_NAME) {
+    const conversionTime = new Map();
+    const dayInMillisecs = 1000 * 60 * 60 * 24;
+
+    conversionTime.set('Any', 1);
+    // Set today to 36 hours instead of 24; to get most of the videos from the
+    // previous day
+    conversionTime.set('Today', dayInMillisecs * 1.5);
+    conversionTime.set('Week', dayInMillisecs * 7);
+    conversionTime.set('Month', dayInMillisecs * 31);
+    conversionTime.set('Year', dayInMillisecs * 365);
+
+    if (params.get('date')) {
+      const date = params.get('date');
+      params.delete('date');
+
+      if (date != 'Any') {
+        const param_date = new Date(Date.now() - conversionTime.get(date));
+        // we truncate minutes, seconds and ms from the date in order to benefit
+        // from caching at the API level.
+        param_date.setMinutes(0, 0, 0);
+        params.append('date_gte', param_date.toISOString());
+      }
+    }
+  }
+};
+
+/**
+ * Return a metadata `Record` based on the URL parameters, compliant with the
+ * given poll.
+ *
+ * This `Record` is meant to be used as parameter of the generated API
+ * services.
+ */
+const getMetadataFilter = (
+  pollName: string,
+  params: URLSearchParams
+): Record<string, string | string[]> => {
+  const metadata: Record<string, string | string[]> = {};
+
+  // build a filter for the YouTube poll
+  if (pollName === YOUTUBE_POLL_NAME) {
+    const durationLteFilter = params.get('duration_lte');
+    const durationGteFilter = params.get('duration_gte');
+
+    const languageFilter = params.get('language');
+    const uploaderFilter = params.get('uploader');
+
+    if (languageFilter) {
+      metadata['language'] = languageFilter.split(',');
+    }
+
+    if (uploaderFilter) {
+      metadata['uploader'] = uploaderFilter;
+    }
+
+    if (durationLteFilter) {
+      // from minutes to seconds
+      metadata['duration:lte:int'] = (
+        parseInt(durationLteFilter) * 60
+      ).toString();
+    }
+
+    if (durationGteFilter) {
+      // from minutes to seconds
+      metadata['duration:gte:int'] = (
+        parseInt(durationGteFilter) * 60
+      ).toString();
+    }
+  }
+
+  return metadata;
+};
+
+export enum ScoreModeEnum {
+  DEFAULT = 'default',
+  ALL_EQUAL = 'all_equal',
+  TRUSTED_ONLY = 'trusted_only',
+}
+
+/**
+ * Return the collective recommendations of a given poll.
+ */
+export const getRecommendations = async (
+  pollName: string,
+  limit: number,
+  searchString: string,
+  criterias: PollCriteria[],
+  pollOptions?: SelectablePoll
+): Promise<PaginatedRecommendationList> => {
+  const params = new URLSearchParams(searchString);
+
+  overwriteDateURLParameter(pollName, params);
+
+  let criteriaWeights = Object.fromEntries(
+    criterias.map((c) => [c.name, getParamValueAsNumber(params, c.name)])
+  );
+
+  /*
+    Temporary workaround for "presidentielle2022":
+    Contrary to poll "videos" where the default order for recommendations is an aggregation of
+    criteria, here we need to sort by the main criterion only (if custom weights are not provided).
+    2 things to fix before removing this workaround:
+      - update the backend implementation of "tournesol_score" to apply this new definition
+      - make sure that `CriteriaFilter` behaves correctly on initialization, and that its state
+      persists after the filter section is closed or the page is refreshed.
+  */
+  if (
+    pollName === PRESIDENTIELLE_2022_POLL_NAME &&
+    Object.values(criteriaWeights).filter((x) => x != null).length === 0
+  ) {
+    criteriaWeights = {
+      ...Object.fromEntries(criterias.map((c) => [c.name, 0])),
+      [pollOptions?.mainCriterionName ?? '']: 100,
+    };
+  }
+
+  const advanced = params.get('advanced') || '';
+  const advanced_options = advanced.split(',');
+
+  try {
+    return await PollsService.pollsRecommendationsList({
+      name: pollName,
+      limit: limit,
+      offset: getParamValueAsNumber(params, 'offset'),
+      search: params.get('search') ?? undefined,
+      dateGte: params.get('date_gte') ?? undefined,
+      unsafe: advanced_options.includes('unsafe') || pollOptions?.unsafeDefault,
+      excludeComparedEntities: advanced_options.includes('exclude_compared'),
+      metadata: getMetadataFilter(pollName, params),
+      scoreMode: (params.get('score_mode') as ScoreModeEnum) ?? undefined,
+      weights: criteriaWeights,
+    });
+  } catch (err) {
+    console.error(err);
+    return {
+      results: [],
+      count: 0,
+    };
+  }
+};
+
+/**
+ * Return a user's public personal recommendations in a given poll.
+ */
+export const getPublicPersonalRecommendations = async (
+  username: string,
+  pollName: string,
+  limit: number,
+  searchString: string,
+  criterias: PollCriteria[],
+  pollOptions?: SelectablePoll
+): Promise<PaginatedContributorRecommendationsList> => {
+  const params = new URLSearchParams(searchString);
+
+  overwriteDateURLParameter(pollName, params);
+
+  const criteriaWeights = Object.fromEntries(
+    criterias.map((c) => [c.name, getParamValueAsNumber(params, c.name)])
+  );
+
+  try {
+    return await UsersService.usersRecommendationsList({
+      username: username,
+      pollName: pollName,
+      limit: limit,
+      offset: getParamValueAsNumber(params, 'offset'),
+      search: params.get('search') ?? undefined,
+      dateGte: params.get('date_gte') ?? undefined,
+      unsafe: params.has('unsafe')
+        ? params.get('unsafe') === 'true'
+        : pollOptions?.unsafeDefault,
+      metadata: getMetadataFilter(pollName, params),
+      weights: criteriaWeights,
+    });
+  } catch (err) {
+    console.error(err);
+    return {
+      results: [],
+      count: 0,
+    };
+  }
+};

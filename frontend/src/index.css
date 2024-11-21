@@ -1,0 +1,64 @@
+body {
+  overscroll-behavior-y: contain;
+}
+
+html, body, #root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #fafafa;
+}
+
+@media not (min-width: 600px) {
+  html {
+    font-size: 95%;
+  }
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/**
+ * Classes used in the last resorts, when components don't provide the `sx`
+ * attribute. Like `Link` from the react-router-dom package.
+ */
+
+.full-width {
+  width: 100%;
+}
+
+/* -- start: third-party packages customization -- */
+
+/* pkg: notistack */
+.SnackbarContainer-root.belowTopBar {
+  /* Display alerts below the top bar, to avoid hiding buttons. This value
+     should be greater or equal to the top bar height. */
+  top: 62px;
+}
+html.embedded .SnackbarContainer-root.belowTopBar {
+  /* When the site is embedded in the browser extension iframe, we move the
+     snackbar into the empty page title bar in order to avoid shadowing any
+     page content. */
+  top: 4px;
+}
+
+
+/* pkg: @mui/material */
+@media (pointer: coarse) {
+  /* On touch screens, disable touch events on the slider rail.
+     Only the slider "thumb" will remain interactive. */
+  .MuiSlider-root {
+    pointer-events: none;
+  }
+  .MuiSlider-root .MuiSlider-thumb {
+    pointer-events: auto;
+    /* `touch-action: none` is used internally by MUI on Slider to disable
+    scrolling and zooming on touch events. But it conflicts with
+    `pointer-events: none` on Firefox. So it's required here too. */
+    touch-action: none;
+  }
+}
+
+/* -- end: third-party packages customization -- */

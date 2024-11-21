@@ -1,0 +1,93 @@
+{
+  "name": "tournesol",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@emotion/react": "^11.7.1",
+    "@emotion/styled": "^11.6.0",
+    "@mui/icons-material": "^5.14.3",
+    "@mui/material": "^5.14.5",
+    "@mui/styles": "^5.14.5",
+    "@react-hook/resize-observer": "^1.2.5",
+    "@reduxjs/toolkit": "^1.7.1",
+    "@types/react": "^17",
+    "@types/react-dom": "^17.0.11",
+    "@types/react-redux": "^7.1.7",
+    "@types/react-router-dom": "^5.1.8",
+    "@use-gesture/react": "^10.3.1",
+    "i18next": "^22.4.0",
+    "i18next-browser-languagedetector": "^8.0.0",
+    "i18next-http-backend": "^2.1.1",
+    "linkify-string": "^4.1",
+    "linkifyjs": "^4.1",
+    "notistack": "^2.0.3",
+    "plausible-tracker": "^0.3.8",
+    "precompress": "7.0.1",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "react-i18next": "^11.18.5",
+    "react-player": "^2.9.0",
+    "react-redux": "^7.2.6",
+    "react-router-dom": "^5.2.0",
+    "recharts": "^2.10.1",
+    "redux": "^4.1.2",
+    "redux-persist": "^6.0.0",
+    "typescript": "~4.5.4"
+  },
+  "scripts": {
+    "start": "vite",
+    "start:e2e": "cp .env.development .env.production.local && vite build && vite preview --port 3000",
+    "build": "vite build && precompress -t gz -i json,js,css,xml,svg,ttf build",
+    "test": "tsc && vitest",
+    "update-schema": "wget -O scripts/openapi.yaml \"${REACT_APP_API_URL:-http://localhost:8000}/schema/\"",
+    "openapi": "openapi --useOptions -i scripts/openapi.yaml -o src/services/openapi",
+    "lint": "eslint src --ext '.js,.jsx,.ts,.tsx'",
+    "lint:fix": "eslint --fix src --ext '.js,.jsx,.ts,.tsx'",
+    "prepare": "cd .. && husky install frontend/.husky",
+    "i18n:parse": "i18next --config i18next-parser.config.js"
+  },
+  "eslintConfig": {
+    "extends": "react-app"
+  },
+  "devDependencies": {
+    "@testing-library/dom": ">=5",
+    "@testing-library/jest-dom": "^5.16",
+    "@testing-library/react": "^12.1.2",
+    "@testing-library/user-event": "^13.5.0",
+    "@types/redux-mock-store": "^1.0.3",
+    "@typescript-eslint/eslint-plugin": "^5.8.1",
+    "@typescript-eslint/parser": "^5.8.1",
+    "@vitejs/plugin-react": "^4.2.0",
+    "eslint": "^7.31.0",
+    "eslint-config-prettier": "^8.3.0",
+    "eslint-plugin-prettier": "^4.0.0",
+    "eslint-plugin-react": "^7.28.0",
+    "eslint-plugin-react-hooks": "^4.3.0",
+    "husky": "^7.0.1",
+    "i18next-parser": "^9",
+    "jsdom": "^22.1.0",
+    "openapi-typescript-codegen": "^0.23.0",
+    "prettier": "^2.3.2",
+    "react-test-renderer": "^17.0.2",
+    "redux-mock-store": "^1.5.4",
+    "vite": "^5.0.13",
+    "vitest": "^0.34.6",
+    "vitest-fetch-mock": "^0.2.2"
+  },
+  "config": {
+    "supported_languages": [
+      {
+        "code": "en",
+        "name": "English"
+      },
+      {
+        "code": "fr",
+        "name": "Français"
+      }
+    ]
+  },
+  "resolutions": {
+    "@types/react": "^17"
+  }
+}

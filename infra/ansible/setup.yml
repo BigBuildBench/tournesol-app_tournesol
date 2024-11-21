@@ -1,0 +1,17 @@
+- hosts: tournesol
+  roles:
+    - upgrade
+    - base
+    - docker
+    - nftables
+    - zsh
+    - users
+    - postgresql
+    - nginx
+    - repository
+    - django
+    - monitoring
+    - frontend
+    - plausible_analytics
+    - backups
+  become: true

@@ -1,0 +1,183 @@
+server {
+    # if no Host match, close the connection to prevent host spoofing
+    listen 80 default_server;
+
+    # Nginx requires certificates to be defined here. It would be cleaner to
+    # use "ssl_reject_handshake on;" but that requires Nginx >= 1.19.4.
+    listen 443 ssl default_server;
+    ssl_certificate /etc/letsencrypt/live/{{domain_name}}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{domain_name}}/privkey.pem;
+
+    return 444;
+}
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+map $sent_http_content_type $frontend_expires {
+    default             off;
+    # index page (html), and translations (json) should be
+    # revalidated on every visit.
+    text/html           0;
+    application/json    0;
+}
+
+server {
+    client_max_body_size 100M;
+
+    server_name {{domain_name}};
+
+    keepalive_timeout 5;
+
+    error_page 503 /maintenance/index.html;
+
+    location / {
+        {% if maintenance %}
+            return 503;
+        {% else %}
+            root /srv/tournesol-frontend;
+            try_files $uri @index;
+            expires $frontend_expires;
+        {% endif %}
+    }
+
+    location /maintenance {
+        alias /srv/maintenance;
+        try_files $uri =404;
+    }
+
+    location @index {
+        root /srv/tournesol-frontend;
+        sub_filter '__META_OG_IMAGE__' '$scheme://{{api_domain_name}}/preview$request_uri';
+        sub_filter '__META_OG_URL__' '$scheme://$server_name$request_uri';
+        try_files /index.html =404;
+    }
+
+{% if letsencrypt_email is defined %}
+    listen 443 ssl http2;
+    ssl_certificate /etc/letsencrypt/live/{{domain_name}}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{domain_name}}/privkey.pem;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-XSS-Protection "1; mode=block";
+    add_header X-Content-Type-Options nosniff;
+
+    # HSTS set to 180 days (15552000 seconds)
+    # For information, according to Mozilla 1 year is acceptable, and 2 year
+    # is recommended.
+    #
+    #   see: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security
+    #   see: https://hstspreload.org
+    #
+    add_header Strict-Transport-Security "max-age=15552000; includeSubDomains; preload;" always;
+
+    # Content Security Policy
+    #
+    # The following policy will be enforced in addition to those potentially
+    # defined by HTML <meta> tags. When the same directive is defined in
+    # different policies, only the most restrictive is applied.
+    #
+    #   see: https://w3c.github.io/webappsec-csp/#meta-element
+    #   see: https://w3c.github.io/webappsec-csp/#multiple-policies
+    #
+    # The `frame-ancestors` directive is defined here because it's usage is
+    # not allowed in HTML <meta> tags. The other directives are defined directly
+    # in the front end, so that errors can be catched during the development,
+    # even when the front end is not served by a properly configured reverse
+    # proxy.
+    #
+    #   see: https://w3c.github.io/webappsec-csp/#directive-frame-ancestors
+    #
+    add_header Content-Security-Policy "frame-ancestors {{ frontend_csp_frame_ancestors }};";
+{% else %}
+    listen 80;
+{% endif %}
+}
+
+server {
+    client_max_body_size 100M;
+
+    server_name {{api_domain_name}};
+
+    keepalive_timeout 5;
+
+    location /static/ {
+        root /var/www/html;
+    }
+
+    location /media/ {
+        internal;
+        alias /var/www/html/media;
+    }
+
+    location /monitoring/ {
+        allow 127.0.0.1;
+        allow ::1;
+        deny all;
+        access_log off;
+        proxy_redirect off;
+        proxy_buffering off;
+        proxy_pass http://unix:/run/gunicorn.sock;
+    }
+
+    location ~* /accounts/(register|send-reset-password-link)/ {
+        {% if maintenance %}
+            return 503;
+        {% else %}
+            include /etc/nginx/snippets/block_tor.conf;
+            include /etc/nginx/snippets/gunicorn_proxy.conf;
+        {% endif %}
+    }
+
+    location / {
+        {% if maintenance %}
+            return 503;
+        {% else %}
+            include /etc/nginx/snippets/gunicorn_proxy.conf;
+        {% endif %}
+    }
+
+{% if letsencrypt_email is defined %}
+    listen 443 ssl http2;
+    ssl_certificate /etc/letsencrypt/live/{{api_domain_name}}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{api_domain_name}}/privkey.pem;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-XSS-Protection "1; mode=block";
+    add_header X-Content-Type-Options nosniff;
+
+    # HSTS set to 180 days (15552000 seconds)
+    # For information, according to Mozilla 1 year is acceptable, and 2 year
+    # is recommended.
+    #
+    #   see: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security
+    #   see: https://hstspreload.org
+    #
+    add_header Strict-Transport-Security "max-age=15552000; includeSubDomains; preload;" always;
+{% else %}
+    listen 80;
+{% endif %}
+}
+
+{% if letsencrypt_email is defined %}
+server {
+    if ($host = {{domain_name}}) {
+        return 301 https://$host$request_uri;
+    }
+    if ($host = {{api_domain_name}}) {
+        return 301 https://$host$request_uri;
+    }
+    if ($host = {{grafana_domain_name}}) {
+        return 301 https://$host$request_uri;
+    }
+
+    listen 80 deferred;
+
+    server_name {{domain_name}} {{api_domain_name}} {{grafana_domain_name}};
+    return 404;
+}
+{% endif %}
